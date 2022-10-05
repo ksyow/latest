@@ -1583,7 +1583,7 @@ void parallel_query_task_minimum_cores_rest(Fora_class& fora_worker ,Graph& grap
     }
 }
 
-void parallel_query_minimum_cores_real(Graph& graph, int _num_queries, double _time_T, int _num_available_cores, int pre_process_size){
+void parallel_query_minimum_cores_real(Graph& graph, int _num_queries, double _time_T, int _num_available_cores, int _num_pre_cores, int pre_process_size){
     printf("\033[0m\033[1;32m -------parallel_query_minimum_cores_real-------\n\033[0m");
     INFO(config.algo);
     //vector<int> queries;
@@ -1614,7 +1614,7 @@ void parallel_query_minimum_cores_real(Graph& graph, int _num_queries, double _t
         fora_setting(graph.n, graph.m);
         display_setting();
         
-        int num_fora_threads=_num_available_cores;
+        int num_fora_threads=pre_process_size;
         double OMP_check_time_start=omp_get_wtime();
         std::vector<std::thread> threads;
         std::mutex t_s_lock;
@@ -1639,7 +1639,7 @@ void parallel_query_minimum_cores_real(Graph& graph, int _num_queries, double _t
                 
                 Fora_class fora_worker(graph, i);
                 double OMP_check_time_start_thread=omp_get_wtime();
-                parallel_query_task_minimum_cores_pre(fora_worker, graph, i, num_fora_threads, pre_process_size);
+                parallel_query_task_minimum_cores_pre(fora_worker, graph, i, _num_pre_cores, pre_process_size);
                 double time_temp=omp_get_wtime()-OMP_check_time_start_thread;
                 
                 
@@ -1651,18 +1651,20 @@ void parallel_query_minimum_cores_real(Graph& graph, int _num_queries, double _t
                 
                 num_preprocess_thread_sum+=1;
                 if(num_preprocess_thread_sum==num_fora_threads){
-                    printf("\033[0m\033[1;32m Check_total_time(t_s): %.6f\n",t_s_pre_sum/(pre_process_size));
+                    printf("\033[0m\033[1;32m Check_total_time (t_s): %.6f\n",t_s_pre_sum);
+                    printf("\033[0m\033[1;32m Check_average_time (t_average): %.6f\n",t_s_pre_sum/pre_process_size);
+                    printf("\033[0m\033[1;32m Check_maximum_time (t_max): %.6f\n",t_s_pre_maximum);
                     printf("\033[0m\033[1;32m -------------------------------------------------------------------------------------\n");
                     printf("\033[0m\033[1;32m Now we calculate C according to the equation\n");
                     t_s_pre_sum=t_s_pre_sum/(pre_process_size);
                     int C=ceil(_num_queries*t_s_pre_sum/_time_T);
                     printf("\033[0m\033[1;32m Check C: %d\n", C);
                     if(_num_available_cores<C){
-                        printf("\033[0m\033[1;32m Process terminate due to insuffcient cores!\n");
+                        printf("\033[0m\033[1;32m Estimated number of cores to complete %d queries within %fs in the worst-case scenario is %d.\n", _num_queries, _time_T, C);
                         terminal_flag=true;
                     }
                     else{
-                        L_slots=floor((_time_T-t_s_pre_maximum)/t_s_pre_sum);
+                        L_slots=floor((_time_T-t_s_pre_maximum)/t_s_pre_maximum);
                         printf("\033[0m\033[1;32m check L_slots: %.1f\n", L_slots);
                         k_queries=ceil((_num_queries - pre_process_size)/L_slots);
                         printf("\033[0m\033[1;32m check k_queries: %d\n\033[0m", k_queries);
@@ -1688,7 +1690,7 @@ void parallel_query_minimum_cores_real(Graph& graph, int _num_queries, double _t
                     if(i<k_queries){
                         int check_num_query=0;
                         OMP_check_time_start_thread=omp_get_wtime();
-                        parallel_query_task_minimum_cores_rest(fora_worker, graph, i, num_fora_threads, L_slots, k_queries, query_size, pre_process_size, check_num_query);
+                        parallel_query_task_minimum_cores_rest(fora_worker, graph, i, k_queries, L_slots, k_queries, query_size, pre_process_size, check_num_query);
                         time_temp=omp_get_wtime()-OMP_check_time_start_thread;
                         printf("Check thread: %d, average time of query: %.6f\n",i , time_temp/check_num_query);
                         t_sum_lock.lock();
@@ -1731,14 +1733,14 @@ void parallel_query_minimum_cores_real(Graph& graph, int _num_queries, double _t
                 printf("--------------------\n");
                 printf("\033[0m\033[1;32m Program running time: %.6f; Time duration: %.6f \n\033[0m",t_s_pre_maximum+t_sum_result, _time_T);
                 printf("\033[0m\033[1;32m check t_s_pre_average: %.6f; Time duration: %.6f \n\033[0m",t_s_pre_sum, _time_T);
-                printf("\033[0m\033[1;32m The program get the right result with core_number K= %d \n\033[0m", k_queries);
+                printf("\033[0m\033[1;32m At least %d cores are required to complete %d queries within %fs.\n\033[0m", k_queries, _num_queries, _time_T);
                 printf("\033[0m");
             }
             else{
                 printf("--------------------\n");
                 printf("\033[0m\033[1;32m Program running time: %.6f; Time duration: %.6f \n\033[0m",t_s_pre_maximum+t_sum_result, _time_T);
                 printf("\033[0m\033[1;32m check t_s_pre_average: %.6f; Time duration: %.6f \n\033[0m",t_s_pre_sum, _time_T);
-                printf("\033[0m\033[1;32m Processing time exceeds T due to big fluctuation in running time\n\033[0m");
+                printf("\033[0m\033[1;32m Processing time exceeds %f due to big fluctuation in running time\n\033[0m", _time_T);
                 printf("\033[0m");
             }
 
